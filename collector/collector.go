@@ -269,7 +269,7 @@ func (c *MerakiCollector) Describe(ch chan<- *prometheus.Desc) {
 func (c *MerakiCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	s
+
 	c.collectAlerts(ch)
 	c.collectAssuranceAlerts(ch)
 	c.collectBandwidthUsage(ch)
@@ -667,24 +667,24 @@ func (c *MerakiCollector) collectVpnStats(ch chan<- prometheus.Metric) {
 	for _, vpnStat := range c.vpnStatsData {
 		networkName := vpnStat.NetworkName
 		if networkName == "" {
-			networkName = "unknown"
+		networkName = "unknown"
+	}
+	
+	deviceSerial := vpnStat.DeviceSerial
+	if deviceSerial == "" && vpnStat.NetworkID != "" {
+		if serial, ok := networkToSerial[vpnStat.NetworkID]; ok {
+			deviceSerial = serial
+		}
+	}
+	
+	for _, peer := range vpnStat.MerakiVpnPeers {
+		peerNetworkName := peer.NetworkName
+		if peerNetworkName == "" {
+			peerNetworkName = "unknown"
 		}
 		
-		deviceSerial := vpnStat.DeviceSerial
-		if deviceSerial == "" && vpnStat.NetworkID != "" {
-			if serial, ok := networkToSerial[vpnStat.NetworkID]; ok {
-				deviceSerial = serial
-			}
-		}
-		
-		for j, peer := range vpnStat.MerakiVpnPeers {
-			peerNetworkName := peer.NetworkName
-			if peerNetworkName == "" {
-				peerNetworkName = "unknown"
-			}
-			
-			var sentBytes, receivedBytes float64
-			if peer.UsageSummary.SentInKilobytes != "" {
+		var sentBytes, receivedBytes float64
+		if peer.UsageSummary.SentInKilobytes != "" {
 				if val, err := strconv.ParseFloat(peer.UsageSummary.SentInKilobytes, 64); err == nil {
 					sentBytes = val * 1024
 				}
