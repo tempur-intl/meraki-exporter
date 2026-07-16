@@ -33,10 +33,9 @@ func loadConfig() (*Config, error) {
 		return nil, fmt.Errorf("MERAKI_API_KEY environment variable is required")
 	}
 
+	// MERAKI_ORG_ID is optional: when unset it is discovered at startup via the
+	// organizations the API key can access.
 	orgID := os.Getenv("MERAKI_ORG_ID")
-	if orgID == "" {
-		return nil, fmt.Errorf("MERAKI_ORG_ID environment variable is required")
-	}
 
 	fetchIntervalStr := os.Getenv("FETCH_INTERVAL")
 	if fetchIntervalStr == "" {
@@ -65,6 +64,30 @@ func loadConfig() (*Config, error) {
 		ListenAddr:    listenAddr,
 		LogLevel:      logLevel,
 	}, nil
+}
+
+// resolveOrgID discovers which organization to use when MERAKI_ORG_ID is unset.
+// It auto-selects when the API key can reach exactly one organization, and
+// otherwise lists the candidates so the user can pick one.
+func resolveOrgID(client *meraki.Client) (string, error) {
+	orgs, err := client.GetOrganizations()
+	if err != nil {
+		return "", fmt.Errorf("failed to list organizations: %w", err)
+	}
+
+	switch len(orgs) {
+	case 0:
+		return "", fmt.Errorf("no organizations available for this API key; check the key's permissions")
+	case 1:
+		log.Infof("Discovered organization %q (%s)", orgs[0].Name, orgs[0].ID)
+		return orgs[0].ID, nil
+	default:
+		log.Infof("API key has access to %d organizations:", len(orgs))
+		for _, org := range orgs {
+			log.Infof("  %s  %s", org.ID, org.Name)
+		}
+		return "", fmt.Errorf("multiple organizations available; set MERAKI_ORG_ID to one of the IDs listed above")
+	}
 }
 
 // setupLogger configures the logger
@@ -114,12 +137,24 @@ func main() {
 	}
 
 	log.Info("Starting Meraki Prometheus Exporter")
-	log.Infof("Organization ID: %s", config.OrgID)
 	log.Infof("Fetch interval: %s", config.FetchInterval)
 	log.Infof("Listen address: %s", config.ListenAddr)
 
 	// Create Meraki client
 	client := meraki.NewClient(config.APIKey, config.OrgID)
+
+	// Discover the organization when it wasn't configured explicitly
+	if config.OrgID == "" {
+		log.Info("MERAKI_ORG_ID not set, discovering available organizations...")
+		orgID, err := resolveOrgID(client)
+		if err != nil {
+			log.Fatalf("Organization discovery failed: %v", err)
+		}
+		config.OrgID = orgID
+		client.SetOrgID(orgID)
+	}
+
+	log.Infof("Organization ID: %s", config.OrgID)
 
 	// Create collector
 	merakiCollector := collector.NewMerakiCollector(client)
