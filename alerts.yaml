@@ -1,0 +1,109 @@
+groups:
+  - name: meraki_exporter
+    rules:
+      - alert: MerakiExporterDown
+        expr: meraki_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Meraki exporter cannot reach the API"
+          description: "The last Meraki API fetch cycle failed. Check exporter logs and API key validity."
+
+      - alert: MerakiExporterStale
+        expr: time() - meraki_last_success_timestamp_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Meraki exporter has not successfully scraped in 15 minutes"
+          description: "Last successful scrape was {{ $value | humanizeDuration }} ago."
+
+      - alert: MerakiAPIErrors
+        expr: increase(meraki_api_request_errors_total[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Meraki API errors on endpoint {{ $labels.endpoint }}"
+          description: "{{ $value }} API errors on endpoint '{{ $labels.endpoint }}' in the last 15 minutes."
+
+  - name: meraki_devices
+    rules:
+      - alert: MerakiDeviceOffline
+        expr: meraki_device_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Meraki device {{ $labels.name }} is offline"
+          description: "Device '{{ $labels.name }}' ({{ $labels.product_type }}) at {{ $labels.location }} has status '{{ $labels.status }}'."
+
+  - name: meraki_uplinks
+    rules:
+      - alert: MerakiUplinkDown
+        expr: meraki_uplink_up == 0 and on(name, uplink) meraki_uplink_up{status!="not connected"}
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Meraki uplink {{ $labels.uplink }} on {{ $labels.name }} is down"
+          description: "Uplink '{{ $labels.uplink }}' on '{{ $labels.name }}' at {{ $labels.location }} has failed (status: {{ $labels.status }})."
+
+      - alert: MerakiUplinkHighPacketLoss
+        expr: meraki_uplink_loss_percent > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High packet loss on uplink {{ $labels.uplink }} on {{ $labels.name }}"
+          description: "Uplink '{{ $labels.uplink }}' ({{ $labels.ip }}) on '{{ $labels.name }}' at {{ $labels.location }} has {{ $value | humanize }}% packet loss."
+
+      - alert: MerakiUplinkCriticalPacketLoss
+        expr: meraki_uplink_loss_percent > 25
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical packet loss on uplink {{ $labels.uplink }} on {{ $labels.name }}"
+          description: "Uplink '{{ $labels.uplink }}' ({{ $labels.ip }}) on '{{ $labels.name }}' at {{ $labels.location }} has {{ $value | humanize }}% packet loss."
+
+      - alert: MerakiUplinkHighLatency
+        expr: meraki_uplink_latency_ms > 150
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency on uplink {{ $labels.uplink }} on {{ $labels.name }}"
+          description: "Uplink '{{ $labels.uplink }}' ({{ $labels.ip }}) on '{{ $labels.name }}' at {{ $labels.location }} has {{ $value | humanize }}ms latency."
+
+  - name: meraki_appliances
+    rules:
+      - alert: MerakiApplianceHighUtilization
+        expr: meraki_appliance_utilization_percent > 80
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High utilization on Meraki appliance {{ $labels.name }}"
+          description: "Appliance '{{ $labels.name }}' ({{ $labels.model }}) at {{ $labels.location }} is at {{ $value | humanize }}% utilization."
+
+      - alert: MerakiApplianceCriticalUtilization
+        expr: meraki_appliance_utilization_percent > 95
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical utilization on Meraki appliance {{ $labels.name }}"
+          description: "Appliance '{{ $labels.name }}' ({{ $labels.model }}) at {{ $labels.location }} is at {{ $value | humanize }}% utilization."
+
+  - name: meraki_vpn
+    rules:
+      - alert: MerakiVPNPeerUnreachable
+        expr: meraki_vpn_peer_reachability == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "VPN peer {{ $labels.peer_location }} unreachable from {{ $labels.location }}"
+          description: "The VPN tunnel from '{{ $labels.location }}' to peer '{{ $labels.peer_location }}' is down."
